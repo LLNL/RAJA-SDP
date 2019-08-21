@@ -1,5 +1,5 @@
 #include <iostream>
-#include "../chai/src/util/forall.hpp"
+#include "forall.hpp"
 
 using namespace std;
 

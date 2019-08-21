@@ -1,1 +1,1 @@
-add_executable(stp-exec "main.cpp")
+add_executable(stp-exec "main.cu")
