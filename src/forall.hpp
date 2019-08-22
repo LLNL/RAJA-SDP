@@ -51,7 +51,8 @@
 #include "cuda_runtime.h"
 //#endif
 
-#include "device.hpp"
+//#include "device.hpp"
+#include "device2.hpp"
 
 struct sequential {
 };
@@ -101,8 +102,8 @@ __global__ void forall_kernel_gpu(int start, int length, LOOP_BODY body)
 /*
  * \brief Run forall kernel on GPU.
  */
-template <typename LOOP_BODY, typename DEVICE>
-void forall(gpu, DEVICE dev, int begin, int end, LOOP_BODY&& body)
+template <typename LOOP_BODY>
+void forall(camp::devices::Cuda dev, int begin, int end, LOOP_BODY&& body)
 {
 //  chai::ArrayManager* rm = chai::ArrayManager::getInstance();
 
@@ -112,7 +113,7 @@ void forall(gpu, DEVICE dev, int begin, int end, LOOP_BODY&& body)
   size_t gridSize = (end - begin + blockSize - 1) / blockSize;
 
 //#if defined(CHAI_ENABLE_CUDA)
-  forall_kernel_gpu<<<gridSize, blockSize>>>(begin, end - begin, body);
+  forall_kernel_gpu<<<gridSize, blockSize, 0, dev.get_stream()>>>(begin, end - begin, body);
   cudaDeviceSynchronize();
 //#elif defined(CHAI_ENABLE_HIP)
 //  hipLaunchKernelGGL(forall_kernel_gpu, dim3(gridSize), dim3(blockSize), 0,0,

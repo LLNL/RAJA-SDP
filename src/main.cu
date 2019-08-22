@@ -1,4 +1,5 @@
 #include <iostream>
+#include <typeinfo>
 #include "forall.hpp"
 
 #define HOST_DEVICE __host__ __device__
@@ -12,7 +13,7 @@ int main(int argc, char *argv[])
 
   auto lambda = [] HOST_DEVICE (int tid) {
     int sum = 0;
-    for (int i = 0; i < 10000; i++){
+    for (int i = 0; i < tid; i++){
       sum += sqrt(pow(3.14159,i));
     }
   };
@@ -26,9 +27,14 @@ int main(int argc, char *argv[])
       break;
     case 1:
       std::cout << "Running On GPU" << std::endl;
-      gpu g; 
-      auto dev = camp::devices::CudaDevice::get(0);
-      forall(g, dev, 0, 30000, lambda);
+      
+      camp::devices::Cuda cudaDevice;
+      forall(cudaDevice, 0, 30000, lambda);
+
+      camp::devices::Cuda cudaDevice2;
+      forall(cudaDevice2, 0, 30000, lambda);
+
+      forall(cudaDevice, 0, 30000, lambda);
       break;
   }
 
