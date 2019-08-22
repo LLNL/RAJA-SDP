@@ -1,45 +1,55 @@
 #include <iostream>
 #include <cuda_profiler_api.h>
+#include "device2.hpp"
+
+
+template <typename LOOP_BODY>
+__global__ void forall_kernel_gpu2(int start, int length, LOOP_BODY body)
+{
+  int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (idx < length) {
+    body();
+  }
+}
+
+
+template <typename LOOP_BODY>
+void forall(camp::devices::Cuda dev, int begin, int end, LOOP_BODY&& body)
+{
+  size_t blockSize = 32;
+  size_t gridSize = (end - begin + blockSize - 1) / blockSize;
+
+  forall_kernel_gpu2<<<gridSize, blockSize, 0, dev.get_stream()>>>(begin, end - begin, body);
+}
 
 
 // This is a kernel that does no real work but runs at least for a specified number of clocks
-__global__ void clock_block_a(clock_t *d_o, clock_t clock_count)
+__global__ void clock_block_a(clock_t clock_count)
 {
-  __shared__ unsigned int smem[32768/4];
-
   unsigned int start_clock = (unsigned int) clock();
-  smem[0] = start_clock;
-
   clock_t clock_offset = 0;
   while (clock_offset < clock_count)
   {
     unsigned int end_clock = (unsigned int) clock();
     clock_offset = (clock_t)(end_clock - start_clock);
   }
-  d_o[0] = clock_offset;
 }
-
-
 
 
 int main(int argc, char *argv[])
 {
-  int nkernels = 8;               // number of concurrent kernels
-  int nstreams = nkernels + 1;    // use one more stream than concurrent kernel
-  int nbytes = nkernels * sizeof(clock_t);   // number of data bytes
-  float kernel_time = 10; // time the kernel should run in ms
-  float elapsed_time;   // timing variables
+  float kernel_time = 20; // time the kernel should run in ms
   int cuda_device = 0;
 
   
   // allocate host memory
-  clock_t *a = 0;    // pointer to the array data in host memory
-  cudaMallocHost((void **)&a, nbytes);
+  //clock_t *a = 0;    // pointer to the array data in host memory
+  //cudaMallocHost((void **)&a, nbytes);
 
   // allocate device memory
-  clock_t *d_a = 0;  // pointers to data and init value in the device memory
-  cudaMalloc((void **)&d_a, nbytes);
-
+  //clock_t *d_a = 0;  // pointers to data and init value in the device memory
+  //cudaMalloc((void **)&d_a, nbytes);
 
 
   cudaDeviceProp deviceProp;
@@ -54,31 +64,32 @@ int main(int argc, char *argv[])
    deviceProp.major, deviceProp.minor, deviceProp.multiProcessorCount);
 
 
+  camp::devices::Cuda cudev1;
+  camp::devices::Cuda cudev2;
 
-  clock_t total_clocks = 0;
+
 #if defined(__arm__) || defined(__aarch64__)
-  // the kernel takes more time than the channel reset time on arm archs, so to prevent hangs reduce time_clocks.
   clock_t time_clocks = (clock_t)(kernel_time * (deviceProp.clockRate / 1000));
 #else
   clock_t time_clocks = (clock_t)(kernel_time * deviceProp.clockRate);
 #endif
 
 
-  cudaStream_t s1;
-  cudaStream_t s2;
+  auto clock_lambda = [=] __device__ () {
+    unsigned int start_clock = (unsigned int) clock();
+    clock_t clock_offset = 0;
+    while (clock_offset < time_clocks)
+    {
+      unsigned int end_clock = (unsigned int) clock();
+      clock_offset = (clock_t)(end_clock - start_clock);
+    }
+  };
+  
 
-  cudaStreamCreate(&s1);
-  cudaStreamCreate(&s2);
 
-  std::cout << "Hello 2" << std::endl;
-  clock_block_a<<<1,1,0,s1>>>(&d_a[0], time_clocks);
-  clock_block_a<<<1,1,0,s2>>>(&d_a[0], time_clocks);
-
-
-
-
-  cudaFreeHost(a);
-  cudaFree(d_a);
+  forall(cudev1, 0, 1, clock_lambda);
+  forall(cudev2, 0, 1, clock_lambda);
+  forall(cudev1, 0, 1, clock_lambda);
 
   return 0;
 }
