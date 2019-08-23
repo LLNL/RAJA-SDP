@@ -1,241 +1,226 @@
-/*
-Copyright (c) 2016-18, Lawrence Livermore National Security, LLC.
-Produced at the Lawrence Livermore National Laboratory
-Maintained by Tom Scogland <scogland1@llnl.gov>
-CODE-756261, All rights reserved.
-This file is part of camp.
-For details about use and distribution, please read LICENSE and NOTICE from
-http://github.com/llnl/camp
-*/
-
 #ifndef __CAMP_DEVICES_HPP
 #define __CAMP_DEVICES_HPP
 
-#if defined(__NVCC__)
-#include <cuda.h>
-#endif
+#include <cstring>
+#include <memory>
 
-#include <cstddef>
+#include <cuda_runtime.h>
+namespace camp
+{
+namespace devices
+{
 
-namespace camp {
-namespace devices {
-
-enum class Launch { undefined, sync, async };
-
-enum class Platform { undefined = 0, host = 1, cuda = 2, omp_target = 4, hcc = 8 };
-
-class Device {
-  public:
-  //static Device& get_default() {
-  //}
-
-  //static Device& get_default_sync();
-
-  //static Device& get(int num=0, int sync_queue_id=0);
-
-  virtual void sync_all() = 0;
-
-  Platform getPlatform()
-  {
-    return m_platform;
-  }
-
-  Launch getLaunch()
-  {
-    return m_launch;
-  }
-
-  bool async()
-  {
-    return (m_launch == Launch::async);
-
-  }
-
-  virtual void sync(bool all_queues=false) = 0;
-
-  virtual void sync_with(Device& d, bool nowait=false) = 0;
-
-  virtual void *get_sync_id() = 0;
-
-  virtual void * alloc(std::size_t) = 0;
-
-  virtual void free(void const *) = 0;
-
-protected:
-  Device(Platform platform, Launch launch) :
-    m_platform(platform),
-    m_launch(launch)
-  {
-  }
-
-  Platform m_platform;
-  Launch m_launch;
-  void* sync_id;
-};
-
-#if 0 //defined(_OPENMP)
-struct OMPTDevice final : Device {
-  OMPTDevice(int device_num=0, int sync_queue_id=0) : Device(Platform::omp_target, Launch::async){
-  }
-
-  static OMPTDevice get_default() {
-    static OMPTDevice *d = new OMPTDevice();
-  }
-
-  static OMPTDevice get_default_sync();
-
-  static OMPTDevice get(int num=0, int sync_queue_id=0);
-
-  static void sync_all();
-
-  virtual bool async() override;
-
-  virtual void sync(bool all_queues=false) override;
-
-  virtual void sync_with(OMPTDevice d, bool nowait=false)  override;
-
-  virtual void * alloc(size_t)  override;
-
-  virtual void free(void const *)  override;
-};
-#endif
-
-#if defined(__NVCC__)
-
-namespace {
-
-class CuStreamPool {
-  public:
-    static void get(cudaStream_t* stream)
-    {
-      if (!m_custream_pool) {
-        m_custream_pool = new CuStreamPool();
-      }
-
-      m_custream_pool->getNextStream(stream);
-    }
-
-  private:
-    CuStreamPool() :
-      m_current_stream{0}
-    {
-    }
-
-    void getNextStream(cudaStream_t* stream)
-    {
-      size_t stream_id = m_current_stream;
-
-      if (!m_stream_init[stream_id]) {
-        cudaStreamCreate(&(m_stream[stream_id]));
-      }
-
-      m_current_stream = (stream_id+1) % STREAM_POOL_SIZE;
-
-      stream = &m_stream[stream_id];
-    }
-
-    static CuStreamPool* m_custream_pool;
-
-    static const size_t STREAM_POOL_SIZE{25};
-    size_t m_current_stream;
-
-    cudaStream_t m_stream[STREAM_POOL_SIZE];
-    bool m_stream_init[STREAM_POOL_SIZE] = {false};
+  enum class Platform {
+    undefined = 0,
+    host = 1,
+    omp = 2,
+    tbb = 4,
+    cuda = 8,
+    // omp_target = 16, not sure this is a meaningful difference
+    hip = 32
   };
 
-CuStreamPool* CuStreamPool::m_custream_pool = nullptr;
+  class Device
+  {
+    class dev_wrapper_base
+    {
+    public:
+      virtual Platform get_platform();
+      // virtual Cuda &get_default(); // not sure how to do this
+      virtual void *get_context_id();
+      virtual void wait();
+      virtual void *calloc(size_t size);
+      virtual void free(void *p);
+      virtual void memcpy(void *dst, const void *src, size_t size);
+      virtual void memset(void *p, int val, size_t size);
+    };
+    template <typename D>
+    class dev_wrapper : public dev_wrapper_base
+    {
+      D dev;
 
-} 
+    public:
+      dev_wrapper(D d) : dev(d) {}
+      Platform get_platform() override { return dev.get_platform(); }
+      void wait() override { dev.wait(); }
+      void *calloc(size_t size) override { return dev.calloc(size); }
+      void free(void *p) override { dev.free(p); }
+      void memcpy(void *dst, const void *src, size_t size) override
+      {
+        dev.memcpy(dst, src, size);
+      }
+      void memset(void *p, int val, size_t size) override
+      {
+        dev.memset(p, val, size);
+      }
+    };
 
-class CudaDevice final : public Device {
+    std::shared_ptr<dev_wrapper_base> d;
+
   public:
-  static CudaDevice& get_default()
+    template <typename T>
+    Device(T dev) : d(std::make_shared(dev_wrapper<T>(dev)))
+    {
+    }
+    Platform get_platform() { return d->get_platform(); }
+    void wait() { d->wait(); }
+    template <typename T>
+    T *allocate(size_t size)
+    {
+      return (T *)d->calloc(size * sizeof(T));
+    }
+    void *calloc(size_t size) { return d->calloc(size); }
+    void free(void *p) { d->free(p); }
+    void memcpy(void *dst, const void *src, size_t size)
+    {
+      d->memcpy(dst, src, size);
+    }
+    void memset(void *p, int val, size_t size) { d->memset(p, val, size); }
+  };
+
+  class Host
   {
-    static CudaDevice* dev = new CudaDevice(true, 0, nullptr);
-    return *dev;
-  }
+  public:
+    Host(int device = 0, int group = -1) {}
 
-  static CudaDevice& get_default_sync()
+    // Methods
+    Platform get_platform() { return Platform::host; }
+    Host &get_default()
+    {
+      static Host h;
+      return h;
+    }
+    void wait()
+    {
+      // nothing to wait for, sequential/simd host is always synchronous
+    }
+    // Memory
+    template <typename T>
+    T *allocate(size_t n)
+    {
+      return (T*)malloc(sizeof(T) * n);
+    }
+    void *calloc(size_t size)
+    {
+      void *p = allocate<char>(size);
+      this->memset(p, 0, size);
+      return p;
+    }
+    void free(void *p) { free(p); }
+    void memcpy(void *dst, const void *src, size_t size)
+    {
+      memcpy(dst, src, size);
+    }
+    void memset(void *p, int val, size_t size) { std::memset(p, val, size); }
+  };
+/*
+  class Omp : public Host
   {
-    static CudaDevice* dev = new CudaDevice(false, 0, nullptr);
-    return *dev;
-  }
+    // TODO: see if using fake addresses is an issue
+    char *dep = nullptr;
 
-  static CudaDevice& get(int num=0, cudaStream_t* sync_queue_id=nullptr)
-  {
-    if (sync_queue_id == nullptr)
-      CuStreamPool::get(sync_queue_id);
+  public:
+    Omp(int device = 0, int group = -1) : dep((char *)group) {}
 
-    static CudaDevice* dev = new CudaDevice(true, num, sync_queue_id);
-    return *dev;
-  }
+    // Methods
+    Platform get_platform() { return Platform::omp; }
 
-  void sync_all() final override
-  {
-    int device_count;
-    cudaGetDeviceCount(&device_count);
-
-    int previous_device;
-    cudaGetDevice(&previous_device);
-
-    for (int i = 0; i < device_count; ++i) {
-      cudaSetDevice(i);
-      cudaDeviceSynchronize();
+    Omp &get_default()
+    {
+      static Omp h;
+      return h;
     }
 
-    cudaSetDevice(previous_device);
-  }
-
-  void sync(bool all_queues=false) final override
-  {
-    if (all_queues) {
-      cudaDeviceSynchronize();
-    } else {
-      cudaStreamSynchronize(m_stream);
+    void wait()
+    {
+// TODO: see if taskwait depend has wide enough support
+#pragma omp task if (0) depend(dep[0])
+      {
+      }
+      // #pragma omp taskwait depend(dep[0])
     }
-  }
 
-  void sync_with(Device& d, bool nowait=false)
-  {
-    if (d.getPlatform() == Platform::cuda) {
-      cudaEvent_t event;
-      cudaEventCreate(&event);
+    char *get_dep() { return dep; }
 
-      //cudaEventRecord(event, (cudaStream_t)(*d->get_sync_id()));
-      cudaStreamWaitEvent(m_stream, event, 0);
-    } else {
-      d.sync();
+    // Memory: inherited from Host
+    void memset(void *p, int val, size_t size)
+    {
+      if (omp_get_level() != 0) {
+        ::std::memset(p, val, size);
+      } else {
+        char *c = (char *)p;
+#pragma omp parallel for simd
+        for (size_t i = 0; i < size; ++i) {
+          c[i] = val;
+        }
+      }
     }
-  }
-
-  void* get_sync_id() final override {
-    return &m_stream;
-  }
-
-  void * alloc(size_t size) final override
+  };
+*/
+  class Cuda 
   {
-    void* ret;
-    cudaMalloc(&ret, size);
-    return ret;
-  }
+    static cudaStream_t get_a_stream(int num)
+    {
+      // TODO consider pool size
+      static cudaStream_t streams[16] = {};
+      static int previous = 0;
+      // TODO deal with parallel init
+      if (streams[0] == nullptr) {
+        for (auto &s : streams) {
+          cudaStreamCreate(&s);
+        }
+      }
 
-  void free(void const * ptr) final override
-  {
-    cudaFree(&ptr);
-  }
+      if (num < 0) {
+        previous = (previous + 1) % 16;
+        return streams[previous];
+      }
 
-private:
-  CudaDevice(bool async, int device_num, void* stream) :
-    Device(Platform::cuda, async ? Launch::async : Launch::sync),
-    m_stream((cudaStream_t) stream)
-  {
-  }
+      return streams[num % 16];
+    }
 
-  cudaStream_t m_stream;
-};
-#endif
+  public:
+    Cuda(int device = 0, int group = -1) : stream(get_a_stream(group)) {}
 
-} // end of namespace devices
-} // end of namespace camp
+    // Methods
+    Platform get_platform() { return Platform::cuda; }
+    Cuda &get_default()
+    {
+      static Cuda h;
+      return h;
+    }
+    void wait() { cudaStreamSynchronize(stream); }
+    template <typename T>
+    T *allocate(size_t size)
+    {
+      T *ret = nullptr;
+      cudaMallocManaged(&ret, sizeof(T) * size);
+      return ret;
+    }
+    void *calloc(size_t size)
+    {
+      void *p = allocate<char>(size);
+      this->memset(p, 0, size);
+      return p;
+    }
+    void free(void *p) { cudaFree(p); }
+    void memcpy(void *dst, const void *src, size_t size)
+    {
+      cudaMemcpyAsync(dst, src, size, cudaMemcpyDefault, stream);
+    }
+    void memset(void *p, int val, size_t size)
+    {
+      cudaMemsetAsync(p, val, size, stream);
+    }
 
+    cudaStream_t get_stream() { return stream; }
+
+  private:
+    cudaStream_t stream;
+  };
+
+  
+
+}  // namespace devices
+}  // namespace camp
 #endif /* __CAMP_DEVICES_HPP */

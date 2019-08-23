@@ -1,6 +1,6 @@
 #include <iostream>
 #include <cuda_profiler_api.h>
-#include "device2.hpp"
+#include "device.hpp"
 #include "forall.hpp"
 
 #define HOST_DEVICE __host__ __device__
