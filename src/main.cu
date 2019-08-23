@@ -1,64 +1,94 @@
 #include <iostream>
-#include <typeinfo>
-#include <future>
+#include <cuda_profiler_api.h>
+#include "device2.hpp"
 #include "forall.hpp"
-
-#define HOST_DEVICE __host__ __device__
-
-#define B_SIZE 32
-#define G_SIZE ((1 << 20) + B_SIZE - 1) / B_SIZE
-
-template <typename LOOP_BODY>
-__global__ void forall_kernel_gpu2(int start, int length, LOOP_BODY body, float * mem)
-{
-  int idx = blockDim.x * blockIdx.x + threadIdx.x;
-
-  if (idx < length) {
-    body(idx, mem);
-  }
-}
 
 int main(int argc, char *argv[])
 {
-  int option = 0;
-  if (argc > 1) option = atoi(argv[1]);  
+  float kernel_time = 20; // time the kernel should run in ms
+  int cuda_device = 0;
+  int N = 30000;
+  
+  cudaDeviceProp deviceProp;
+  cudaGetDevice(&cuda_device);
+  cudaGetDeviceProperties(&deviceProp, cuda_device);
+  if ((deviceProp.concurrentKernels == 0))
+  {
+    printf("> GPU does not support concurrent kernel execution\n");
+    printf("  CUDA kernel runs will be serialized\n");
+  }
+  printf("> Detected Compute SM %d.%d hardware with %d multi-processors\n",
+   deviceProp.major, deviceProp.minor, deviceProp.multiProcessorCount);
 
-  auto lambda = [] HOST_DEVICE (int tid, int grid, int block, int N, float * x) {
-    for (int i = tid; i < N; i+= block * grid){
-      x[i] = sqrt(pow(3.14159,i));
+#if defined(__arm__) || defined(__aarch64__)
+  clock_t time_clocks = (clock_t)(kernel_time * (deviceProp.clockRate / 1000));
+#else
+  clock_t time_clocks = (clock_t)(kernel_time * deviceProp.clockRate);
+#endif
+
+
+  // -----------------------------------------------------------------------
+
+  camp::devices::Cuda cudev1;
+  camp::devices::Cuda cudev2;
+  float * m1 = cudev1.allocate<float>(N);
+  float * m2 = cudev2.allocate<float>(N);
+
+
+  auto clock_lambda_1 = [=] __device__ (int idx) {
+    m1[idx] = idx * 2;
+    unsigned int start_clock = (unsigned int) clock();
+    clock_t clock_offset = 0;
+    while (clock_offset < time_clocks)
+    {
+      unsigned int end_clock = (unsigned int) clock();
+      clock_offset = (clock_t)(end_clock - start_clock);
     }
   };
 
-  camp::devices::Cuda cudaDevice;
-  camp::devices::Cuda cudaDevice2;
+  auto clock_lambda_2 = [=] __device__ (int idx) {
+    m2[idx] = 1234;
+    unsigned int start_clock = (unsigned int) clock();
+    clock_t clock_offset = 0;
+    while (clock_offset < time_clocks)
+    {
+      unsigned int end_clock = (unsigned int) clock();
+      clock_offset = (clock_t)(end_clock - start_clock);
+    }
+  };
 
-  int N = 1 << 20; 
+  auto clock_lambda_3 = [=] __device__ (int idx) {
+    float val = m1[idx];
+    m1[idx] = val * val;
+    unsigned int start_clock = (unsigned int) clock();
+    clock_t clock_offset = 0;
+    while (clock_offset < time_clocks)
+    {
+      unsigned int end_clock = (unsigned int) clock();
+      clock_offset = (clock_t)(end_clock - start_clock);
+    }
+  };
 
-  float * m1 = cudaDevice.allocate<float>(N);
-  float * m2 = cudaDevice2.allocate<float>(N);
 
-  switch(option){ 
-    case 0:
-      //std::cout << "Running Sequentially" << std::endl;
-      //sequential s;
-      //forall(s, 0, 30000, lambda, m1);
-      break;
-    case 1:
-      std::cout << "Running On GPU" << std::endl;
-      
-      forall(cudaDevice, 0, N, lambda, m1);
+  forall(cudev1, 0, N, clock_lambda_1);
+  forall(cudev2, 0, N, clock_lambda_2);
+  forall(cudev1, 0, N, clock_lambda_3);
 
-      forall(cudaDevice2, 0, N, lambda, m2);
+  cudaDeviceSynchronize();
 
-      forall(cudaDevice, 0, N, lambda, m1);
-      break;
-    case 2:
-      //std::cout << "Raw CUDA Calls" << std::endl;
-      //forall_kernel_gpu2<<<G_SIZE, B_SIZE >>>(0, N, lambda, m1);
-      //forall_kernel_gpu2<<<G_SIZE, B_SIZE, 0, cudaDevice2.get_stream()>>>(0, N, lambda, m1);
-      //forall_kernel_gpu2<<<G_SIZE, B_SIZE, 0, cudaDevice.get_stream()>>>(0, N, lambda, m1);
-      break;
+  // -----------------------------------------------------------------------
+  
+
+  std::cout << "---------- M1 = (idx * 2) ^ 2 ----------" << std::endl;
+  for (int i = 0; i < 15; i++) {
+    std::cout << m1[i] << std::endl;
   }
 
+  std::cout << "---------- M2 = 1234 ----------" << std::endl;
+  for (int i = 0; i < 15; i++) {
+    std::cout << m2[i] << std::endl;
+  }
+
+  cudaDeviceReset();
   return 0;
 }

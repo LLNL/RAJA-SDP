@@ -62,10 +62,10 @@ struct gpu {
 //#endif
 
 template <typename LOOP_BODY>
-void forall_kernel_cpu(int begin, int end, LOOP_BODY body, float * mem)
+void forall_kernel_cpu(int begin, int end, LOOP_BODY body)
 {
   for (int i = 0; i < (end - begin); ++i) {
-    body(i, gridDim.x, blockDim.x, end, mem);
+    body(i, gridDim.x, blockDim.x, end);
   }
 }
 
@@ -73,7 +73,7 @@ void forall_kernel_cpu(int begin, int end, LOOP_BODY body, float * mem)
  * \brief Run forall kernel on CPU.
  */
 template <typename LOOP_BODY>
-void forall(sequential, int begin, int end, LOOP_BODY body, float * mem)
+void forall(sequential, int begin, int end, LOOP_BODY body)
 {
 //  chai::ArrayManager* rm = chai::ArrayManager::getInstance();
 
@@ -83,19 +83,19 @@ void forall(sequential, int begin, int end, LOOP_BODY body, float * mem)
 
 //  rm->setExecutionSpace(chai::CPU);
 
-  forall_kernel_cpu(begin, end, body, mem);
+  forall_kernel_cpu(begin, end, body);
 
 //  rm->setExecutionSpace(chai::NONE);
 }
 
 //#if defined(CHAI_ENABLE_CUDA) || defined(CHAI_ENABLE_HIP)
 template <typename LOOP_BODY>
-__global__ void forall_kernel_gpu(int start, int length, LOOP_BODY body, float * mem)
+__global__ void forall_kernel_gpu(int start, int length, LOOP_BODY body)
 {
   int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
   if (idx < length) {
-    body(idx, gridDim.x, blockDim.x, length, mem);
+    body(idx);
   }
 }
 
@@ -103,7 +103,7 @@ __global__ void forall_kernel_gpu(int start, int length, LOOP_BODY body, float *
  * \brief Run forall kernel on GPU.
  */
 template <typename LOOP_BODY>
-void forall(camp::devices::Cuda dev, int begin, int end, LOOP_BODY&& body, float * mem)
+void forall(camp::devices::Cuda dev, int begin, int end, LOOP_BODY&& body)
 {
 //  chai::ArrayManager* rm = chai::ArrayManager::getInstance();
 
@@ -113,7 +113,7 @@ void forall(camp::devices::Cuda dev, int begin, int end, LOOP_BODY&& body, float
   size_t gridSize = (end - begin + blockSize - 1) / blockSize;
 
 //#if defined(CHAI_ENABLE_CUDA)
-  forall_kernel_gpu<<<gridSize, blockSize, 0, dev.get_stream()>>>(begin, end - begin, body, mem);
+  forall_kernel_gpu<<<gridSize, blockSize, 0, dev.get_stream()>>>(begin, end - begin, body);
   //forall_kernel_gpu<<<G_SIZE, B_SIZE, 0, dev.get_stream()>>>(begin, end - begin, body);
 //  cudaDeviceSynchronize();
 //#elif defined(CHAI_ENABLE_HIP)
