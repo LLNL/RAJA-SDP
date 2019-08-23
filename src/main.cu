@@ -3,11 +3,16 @@
 #include "device2.hpp"
 #include "forall.hpp"
 
+#define HOST_DEVICE __host__ __device__
+
 int main(int argc, char *argv[])
 {
-  float kernel_time = 20; // time the kernel should run in ms
+  int N = 30;
+  float kernel_time = 0; // time the kernel should run in ms
+#if defined(GPU)
+  if (argc > 1) kernel_time = atoi(argv[1]);
+#endif
   int cuda_device = 0;
-  int N = 30000;
   
   cudaDeviceProp deviceProp;
   cudaGetDevice(&cuda_device);
@@ -28,14 +33,23 @@ int main(int argc, char *argv[])
 
 
   // -----------------------------------------------------------------------
+  //                             Device Stuff
+  // -----------------------------------------------------------------------
 
-  camp::devices::Cuda cudev1;
-  camp::devices::Cuda cudev2;
-  float * m1 = cudev1.allocate<float>(N);
-  float * m2 = cudev2.allocate<float>(N);
+#if defined(GPU)
+  std::cout << "------ Running on GPU ------" << std::endl;
+  camp::devices::Cuda dev1;
+  camp::devices::Cuda dev2;
+#else
+  std::cout << "------ Running on CPU ------" << std::endl;
+  camp::devices::Host dev1;
+  camp::devices::Host dev2;
+#endif
 
+  float * m1 = dev1.allocate<float>(N);
+  float * m2 = dev2.allocate<float>(N);
 
-  auto clock_lambda_1 = [=] __device__ (int idx) {
+  auto clock_lambda_1 = [=] HOST_DEVICE (int idx) {
     m1[idx] = idx * 2;
     unsigned int start_clock = (unsigned int) clock();
     clock_t clock_offset = 0;
@@ -46,7 +60,7 @@ int main(int argc, char *argv[])
     }
   };
 
-  auto clock_lambda_2 = [=] __device__ (int idx) {
+  auto clock_lambda_2 = [=] HOST_DEVICE (int idx) {
     m2[idx] = 1234;
     unsigned int start_clock = (unsigned int) clock();
     clock_t clock_offset = 0;
@@ -57,7 +71,7 @@ int main(int argc, char *argv[])
     }
   };
 
-  auto clock_lambda_3 = [=] __device__ (int idx) {
+  auto clock_lambda_3 = [=] HOST_DEVICE (int idx) {
     float val = m1[idx];
     m1[idx] = val * val;
     unsigned int start_clock = (unsigned int) clock();
@@ -70,25 +84,26 @@ int main(int argc, char *argv[])
   };
 
 
-  forall(cudev1, 0, N, clock_lambda_1);
-  forall(cudev2, 0, N, clock_lambda_2);
-  forall(cudev1, 0, N, clock_lambda_3);
+  forall(dev1, 0, N, clock_lambda_1);
+  forall(dev2, 0, N, clock_lambda_2);
+  forall(dev1, 0, N, clock_lambda_3);
 
   cudaDeviceSynchronize();
 
   // -----------------------------------------------------------------------
   
 
-  std::cout << "---------- M1 = (idx * 2) ^ 2 ----------" << std::endl;
+  std::cout << "------ M1 = (idx * 2) ^ 2 ------" << std::endl;
   for (int i = 0; i < 15; i++) {
     std::cout << m1[i] << std::endl;
   }
 
-  std::cout << "---------- M2 = 1234 ----------" << std::endl;
+  std::cout << "------ M2 = 1234 ------" << std::endl;
   for (int i = 0; i < 15; i++) {
     std::cout << m2[i] << std::endl;
   }
 
+  cudaProfilerStop();
   cudaDeviceReset();
   return 0;
 }

@@ -65,7 +65,7 @@ template <typename LOOP_BODY>
 void forall_kernel_cpu(int begin, int end, LOOP_BODY body)
 {
   for (int i = 0; i < (end - begin); ++i) {
-    body(i, gridDim.x, blockDim.x, end);
+    body(i);
   }
 }
 
@@ -73,12 +73,12 @@ void forall_kernel_cpu(int begin, int end, LOOP_BODY body)
  * \brief Run forall kernel on CPU.
  */
 template <typename LOOP_BODY>
-void forall(sequential, int begin, int end, LOOP_BODY body)
+void forall(camp::devices::Host, int begin, int end, LOOP_BODY body)
 {
 //  chai::ArrayManager* rm = chai::ArrayManager::getInstance();
 
 //#if defined(CHAI_ENABLE_UM)
-  cudaDeviceSynchronize();
+//  cudaDeviceSynchronize();
 //#endif
 
 //  rm->setExecutionSpace(chai::CPU);
@@ -114,7 +114,6 @@ void forall(camp::devices::Cuda dev, int begin, int end, LOOP_BODY&& body)
 
 //#if defined(CHAI_ENABLE_CUDA)
   forall_kernel_gpu<<<gridSize, blockSize, 0, dev.get_stream()>>>(begin, end - begin, body);
-  //forall_kernel_gpu<<<G_SIZE, B_SIZE, 0, dev.get_stream()>>>(begin, end - begin, body);
 //  cudaDeviceSynchronize();
 //#elif defined(CHAI_ENABLE_HIP)
 //  hipLaunchKernelGGL(forall_kernel_gpu, dim3(gridSize), dim3(blockSize), 0,0,
