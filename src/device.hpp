@@ -20,6 +20,17 @@ namespace devices
     hip = 32
   };
 
+
+  class Event
+  {
+  public:
+    Event(){ cudaEventCreateWithFlags(&m_event, cudaEventDisableTiming); }
+    void capture(cudaStream_t stream){ cudaEventRecord(m_event, stream); }
+    void wait(){ while(cudaEventQuery(m_event) != 0){} } 
+  private:
+    cudaEvent_t m_event;
+  };
+
   class Device
   {
     class dev_wrapper_base

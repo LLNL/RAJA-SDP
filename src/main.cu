@@ -10,6 +10,7 @@ int main(int argc, char *argv[])
   int N = 30;
   float kernel_time = 0; // time the kernel should run in ms
 #if defined(GPU)
+  kernel_time = 20;
   if (argc > 1) kernel_time = atoi(argv[1]);
 #endif
   int cuda_device = 0;
@@ -83,12 +84,22 @@ int main(int argc, char *argv[])
     }
   };
 
-
-  forall(dev1, 0, N, clock_lambda_1);
-  forall(dev2, 0, N, clock_lambda_2);
+#if defined(GPU)
+  auto e1 = forall(dev1, 0, N, clock_lambda_1);
   forall(dev1, 0, N, clock_lambda_3);
-
+  e1.wait();
+  forall(dev2, 0, N, clock_lambda_2);
   cudaDeviceSynchronize();
+#else
+  forall(dev1, 0, N, clock_lambda_1);
+  forall(dev1, 0, N, clock_lambda_3);
+  forall(dev2, 0, N, clock_lambda_2);
+#endif
+
+
+#if defined(GPU)
+#endif
+
 
   // -----------------------------------------------------------------------
   
