@@ -9,7 +9,7 @@ __global__ void forall_kernel_gpu2(int start, int length, LOOP_BODY body)
   int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
   if (idx < length) {
-    body();
+    body(idx);
   }
 }
 
@@ -41,17 +41,8 @@ int main(int argc, char *argv[])
 {
   float kernel_time = 20; // time the kernel should run in ms
   int cuda_device = 0;
-
+  int N = 30000;
   
-  // allocate host memory
-  //clock_t *a = 0;    // pointer to the array data in host memory
-  //cudaMallocHost((void **)&a, nbytes);
-
-  // allocate device memory
-  //clock_t *d_a = 0;  // pointers to data and init value in the device memory
-  //cudaMalloc((void **)&d_a, nbytes);
-
-
   cudaDeviceProp deviceProp;
   cudaGetDevice(&cuda_device);
   cudaGetDeviceProperties(&deviceProp, cuda_device);
@@ -63,11 +54,6 @@ int main(int argc, char *argv[])
   printf("> Detected Compute SM %d.%d hardware with %d multi-processors\n",
    deviceProp.major, deviceProp.minor, deviceProp.multiProcessorCount);
 
-
-  camp::devices::Cuda cudev1;
-  camp::devices::Cuda cudev2;
-
-
 #if defined(__arm__) || defined(__aarch64__)
   clock_t time_clocks = (clock_t)(kernel_time * (deviceProp.clockRate / 1000));
 #else
@@ -75,7 +61,16 @@ int main(int argc, char *argv[])
 #endif
 
 
-  auto clock_lambda = [=] __device__ () {
+  // -----------------------------------------------------------------------
+
+  camp::devices::Cuda cudev1;
+  camp::devices::Cuda cudev2;
+  float * m1 = cudev1.allocate<float>(N);
+  float * m2 = cudev2.allocate<float>(N);
+
+
+  auto clock_lambda_1 = [=] __device__ (int idx) {
+    m1[idx] = idx * 2;
     unsigned int start_clock = (unsigned int) clock();
     clock_t clock_offset = 0;
     while (clock_offset < time_clocks)
@@ -84,12 +79,50 @@ int main(int argc, char *argv[])
       clock_offset = (clock_t)(end_clock - start_clock);
     }
   };
+
+  auto clock_lambda_2 = [=] __device__ (int idx) {
+    m2[idx] = 1234;
+    unsigned int start_clock = (unsigned int) clock();
+    clock_t clock_offset = 0;
+    while (clock_offset < time_clocks)
+    {
+      unsigned int end_clock = (unsigned int) clock();
+      clock_offset = (clock_t)(end_clock - start_clock);
+    }
+  };
+
+  auto clock_lambda_3 = [=] __device__ (int idx) {
+    float val = m1[idx];
+    m1[idx] = val * val;
+    unsigned int start_clock = (unsigned int) clock();
+    clock_t clock_offset = 0;
+    while (clock_offset < time_clocks)
+    {
+      unsigned int end_clock = (unsigned int) clock();
+      clock_offset = (clock_t)(end_clock - start_clock);
+    }
+  };
+
+
+  forall(cudev1, 0, N, clock_lambda_1);
+  forall(cudev2, 0, N, clock_lambda_2);
+  forall(cudev1, 0, N, clock_lambda_3);
+
+  cudaDeviceSynchronize();
+
+  // -----------------------------------------------------------------------
   
 
+  std::cout << "---------- M1 = (idx * 2) ^ 2 ----------" << std::endl;
+  for (int i = 0; i < 15; i++) {
+    std::cout << m1[i] << std::endl;
+  }
 
-  forall(cudev1, 0, 1, clock_lambda);
-  forall(cudev2, 0, 1, clock_lambda);
-  forall(cudev1, 0, 1, clock_lambda);
+  std::cout << "---------- M2 = 1234 ----------" << std::endl;
+  for (int i = 0; i < 15; i++) {
+    std::cout << m2[i] << std::endl;
+  }
 
+  cudaDeviceReset();
   return 0;
 }

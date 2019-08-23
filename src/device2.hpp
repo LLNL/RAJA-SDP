@@ -98,7 +98,7 @@ namespace devices
     template <typename T>
     T *allocate(size_t n)
     {
-      return reinterpret_cast<T *>(allocate<char>(n * sizeof(T)));
+      return (T*)malloc(sizeof(T) * n);
     }
     void *calloc(size_t size)
     {
@@ -194,7 +194,7 @@ namespace devices
     T *allocate(size_t size)
     {
       T *ret = nullptr;
-      cudaMalloc(&ret, sizeof(T) * size);
+      cudaMallocManaged(&ret, sizeof(T) * size);
       return ret;
     }
     void *calloc(size_t size)
