@@ -86,8 +86,10 @@ int main(int argc, char *argv[])
 
 #if defined(GPU)
   auto e1 = forall(dev1, 0, N, clock_lambda_1);
+  dev2.wait_on(e1);
+  //dev2.wait_on(forall(dev1, 0, N, clock_lambda_1));
   forall(dev1, 0, N, clock_lambda_3);
-  e1.wait();
+
   forall(dev2, 0, N, clock_lambda_2);
   cudaDeviceSynchronize();
 #else

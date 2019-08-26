@@ -31,6 +31,7 @@ namespace devices
     cudaEvent_t m_event;
   };
 
+
   class Device
   {
     class dev_wrapper_base
@@ -40,6 +41,7 @@ namespace devices
       // virtual Cuda &get_default(); // not sure how to do this
       virtual void *get_context_id();
       virtual void wait();
+      virtual void wait_on(Event e);
       virtual void *calloc(size_t size);
       virtual void free(void *p);
       virtual void memcpy(void *dst, const void *src, size_t size);
@@ -54,6 +56,7 @@ namespace devices
       dev_wrapper(D d) : dev(d) {}
       Platform get_platform() override { return dev.get_platform(); }
       void wait() override { dev.wait(); }
+      void wait_on(Event e) override { dev.wait_on(e); }
       void *calloc(size_t size) override { return dev.calloc(size); }
       void free(void *p) override { dev.free(p); }
       void memcpy(void *dst, const void *src, size_t size) override
@@ -75,6 +78,7 @@ namespace devices
     }
     Platform get_platform() { return d->get_platform(); }
     void wait() { d->wait(); }
+    void wait_on(Event e) { d->wait_on(e); }
     template <typename T>
     T *allocate(size_t size)
     {
@@ -201,6 +205,7 @@ namespace devices
       return h;
     }
     void wait() { cudaStreamSynchronize(stream); }
+    void wait_on(Event e) { e.wait(); }
     template <typename T>
     T *allocate(size_t size)
     {
