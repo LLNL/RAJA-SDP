@@ -32,65 +32,67 @@ namespace devices
   };
 
 
-  class Device
+  class Cuda 
   {
-    class dev_wrapper_base
+    static cudaStream_t get_a_stream(int num)
     {
-    public:
-      virtual Platform get_platform();
-      // virtual Cuda &get_default(); // not sure how to do this
-      virtual void *get_context_id();
-      virtual void wait();
-      virtual void wait_on(Event e);
-      virtual void *calloc(size_t size);
-      virtual void free(void *p);
-      virtual void memcpy(void *dst, const void *src, size_t size);
-      virtual void memset(void *p, int val, size_t size);
-    };
-    template <typename D>
-    class dev_wrapper : public dev_wrapper_base
-    {
-      D dev;
-
-    public:
-      dev_wrapper(D d) : dev(d) {}
-      Platform get_platform() override { return dev.get_platform(); }
-      void wait() override { dev.wait(); }
-      void wait_on(Event e) override { dev.wait_on(e); }
-      void *calloc(size_t size) override { return dev.calloc(size); }
-      void free(void *p) override { dev.free(p); }
-      void memcpy(void *dst, const void *src, size_t size) override
-      {
-        dev.memcpy(dst, src, size);
+      // TODO consider pool size
+      static cudaStream_t streams[16] = {};
+      static int previous = 0;
+      // TODO deal with parallel init
+      if (streams[0] == nullptr) {
+        for (auto &s : streams) {
+          cudaStreamCreate(&s);
+        }
       }
-      void memset(void *p, int val, size_t size) override
-      {
-        dev.memset(p, val, size);
-      }
-    };
 
-    std::shared_ptr<dev_wrapper_base> d;
+      if (num < 0) {
+        previous = (previous + 1) % 16;
+        return streams[previous];
+      }
+
+      return streams[num % 16];
+    }
 
   public:
-    template <typename T>
-    Device(T dev) : d(std::make_shared(dev_wrapper<T>(dev)))
+    Cuda(int device = 0, int group = -1) : stream(get_a_stream(group)) {}
+
+    // Methods
+    Platform get_platform() { return Platform::cuda; }
+    Cuda &get_default()
     {
+      static Cuda h;
+      return h;
     }
-    Platform get_platform() { return d->get_platform(); }
-    void wait() { d->wait(); }
-    void wait_on(Event e) { d->wait_on(e); }
+    void wait() { cudaStreamSynchronize(stream); }
+    void wait_on(Event e) { e.wait(); }
     template <typename T>
     T *allocate(size_t size)
     {
-      return (T *)d->calloc(size * sizeof(T));
+      T *ret = nullptr;
+      cudaMallocManaged(&ret, sizeof(T) * size);
+      return ret;
     }
-    void *calloc(size_t size) { return d->calloc(size); }
-    void free(void *p) { d->free(p); }
+    void *calloc(size_t size)
+    {
+      void *p = allocate<char>(size);
+      this->memset(p, 0, size);
+      return p;
+    }
+    void free(void *p) { cudaFree(p); }
     void memcpy(void *dst, const void *src, size_t size)
     {
-      d->memcpy(dst, src, size);
+      cudaMemcpyAsync(dst, src, size, cudaMemcpyDefault, stream);
     }
-    void memset(void *p, int val, size_t size) { d->memset(p, val, size); }
+    void memset(void *p, int val, size_t size)
+    {
+      cudaMemsetAsync(p, val, size, stream);
+    }
+
+    cudaStream_t get_stream() { return stream; }
+
+  private:
+    cudaStream_t stream;
   };
 
   class Host
@@ -172,70 +174,68 @@ namespace devices
     }
   };
 */
-  class Cuda 
+
+  class Device
   {
-    static cudaStream_t get_a_stream(int num)
+    class dev_wrapper_base
     {
-      // TODO consider pool size
-      static cudaStream_t streams[16] = {};
-      static int previous = 0;
-      // TODO deal with parallel init
-      if (streams[0] == nullptr) {
-        for (auto &s : streams) {
-          cudaStreamCreate(&s);
-        }
-      }
+    public:
+      virtual Platform get_platform();
+      // virtual Cuda &get_default(); // not sure how to do this
+      virtual void *get_context_id();
+      virtual void wait();
+      virtual void wait_on(Event e);
+      virtual void *calloc(size_t size);
+      virtual void free(void *p);
+      virtual void memcpy(void *dst, const void *src, size_t size);
+      virtual void memset(void *p, int val, size_t size);
+    };
+    template <typename D>
+    class dev_wrapper : public dev_wrapper_base
+    {
+      D dev;
 
-      if (num < 0) {
-        previous = (previous + 1) % 16;
-        return streams[previous];
+    public:
+      dev_wrapper(D d) : dev(d) {}
+      Platform get_platform() override { return dev.get_platform(); }
+      void wait() override { dev.wait(); }
+      void wait_on(Event e) override { dev.wait_on(e); }
+      void *calloc(size_t size) override { return dev.calloc(size); }
+      void free(void *p) override { dev.free(p); }
+      void memcpy(void *dst, const void *src, size_t size) override
+      {
+        dev.memcpy(dst, src, size);
       }
+      void memset(void *p, int val, size_t size) override
+      {
+        dev.memset(p, val, size);
+      }
+    };
 
-      return streams[num % 16];
-    }
+    std::shared_ptr<dev_wrapper_base> d;
 
   public:
-    Cuda(int device = 0, int group = -1) : stream(get_a_stream(group)) {}
-
-    // Methods
-    Platform get_platform() { return Platform::cuda; }
-    Cuda &get_default()
+    template <typename T>
+    Device(T dev) : d(std::make_shared(dev_wrapper<T>(dev)))
     {
-      static Cuda h;
-      return h;
     }
-    void wait() { cudaStreamSynchronize(stream); }
-    void wait_on(Event e) { e.wait(); }
+    Platform get_platform() { return d->get_platform(); }
+    void wait() { d->wait(); }
+    void wait_on(Event e) { d->wait_on(e); }
     template <typename T>
     T *allocate(size_t size)
     {
-      T *ret = nullptr;
-      cudaMallocManaged(&ret, sizeof(T) * size);
-      return ret;
+      return (T *)d->calloc(size * sizeof(T));
     }
-    void *calloc(size_t size)
-    {
-      void *p = allocate<char>(size);
-      this->memset(p, 0, size);
-      return p;
-    }
-    void free(void *p) { cudaFree(p); }
+    void *calloc(size_t size) { return d->calloc(size); }
+    void free(void *p) { d->free(p); }
     void memcpy(void *dst, const void *src, size_t size)
     {
-      cudaMemcpyAsync(dst, src, size, cudaMemcpyDefault, stream);
+      d->memcpy(dst, src, size);
     }
-    void memset(void *p, int val, size_t size)
-    {
-      cudaMemsetAsync(p, val, size, stream);
-    }
-
-    cudaStream_t get_stream() { return stream; }
-
-  private:
-    cudaStream_t stream;
+    void memset(void *p, int val, size_t size) { d->memset(p, val, size); }
   };
-
-  
+ 
 
 }  // namespace devices
 }  // namespace camp

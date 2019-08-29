@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
 #if defined(GPU)
   auto e1 = forall(dev1, 0, N, clock_lambda_1);
   dev2.wait_on(e1);
-  //dev2.wait_on(forall(dev1, 0, N, clock_lambda_1));
+  
   forall(dev1, 0, N, clock_lambda_3);
 
   forall(dev2, 0, N, clock_lambda_2);
@@ -96,10 +96,6 @@ int main(int argc, char *argv[])
   forall(dev1, 0, N, clock_lambda_1);
   forall(dev1, 0, N, clock_lambda_3);
   forall(dev2, 0, N, clock_lambda_2);
-#endif
-
-
-#if defined(GPU)
 #endif
 
 
