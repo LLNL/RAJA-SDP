@@ -27,20 +27,25 @@ namespace exp{
   class Context
   {
     public:
+
+      Context(){}
+
       template<typename T>
-      Context(T&& value){ *this = value; }
-      
-      template<typename T>
-      Context& operator=(T&& value) { m_value.reset(new ContextModel<T>(value)); }
+      Context(T&& value){ m_value.reset(new ContextModel<T>(value));}
 
       void print_name() const { m_value->print_name(); }
       void set_value(int i) const { m_value->set_value(i); }
 
       template<typename T>
-      T& get_device() { static_cast<T*>(m_value->get_device()); }
-
-      template<typename T>
-      void get_device(T *dst) { dst = static_cast<T*>(m_value->get_device()); }
+      T* get_device() { 
+	auto result = dynamic_cast<ContextModel<T>*>(m_value.get()); 
+	if (result ==nullptr)
+	{
+	  std::cout << "NULLPTR" << std::endl;
+	  std::exit(1);
+	}
+	return result->get_device();
+      }
 
     private:
       class ContextConcept {
@@ -48,7 +53,6 @@ namespace exp{
 	  virtual ~ContextConcept(){}
 	  virtual void print_name() const = 0;
 	  virtual void set_value(int i) = 0;
-	  virtual void* get_device() = 0;
       };
 
       template<typename T>
@@ -57,7 +61,7 @@ namespace exp{
 	  ContextModel(T const& modelVal) : m_modelVal(modelVal) {}
 	  void print_name() const override { m_modelVal.print_name(); }
 	  void set_value(int i) override { m_modelVal.set_value(i); }
-	  void *get_device() override { return &m_modelVal; }
+	  T *get_device() { return &m_modelVal; }
 	private:
 	  T m_modelVal;
       };
@@ -71,34 +75,26 @@ int main(int argc, char*argv[])
 {
   using namespace exp;
   std::cout << "- TEST : Creating GPU context" << std::endl;
-  Context my_dev{GPU()};
-  my_dev.print_name();
+  Context dev{GPU()};
+  dev.print_name();
 
-  std::cout << "- TEST : Setting my_dev to Host object" << std::endl; 
-  my_dev = Host();
-  my_dev.print_name();
-
-  std::cout << "- TEST : Copy Constructor test" << std::endl; 
-  Context my_dev2{GPU()};
-  my_dev.set_value(2);
-  my_dev.print_name();
-  my_dev2 = my_dev;
-  my_dev2.print_name();
+  std::cout << "- TEST : Setting dev to Host object" << std::endl; 
+  dev = Host();
+  dev.print_name();
 
   std::cout << "- TEST : Getting Typed object from context (copy constructed)" << std::endl;
-  Host h = my_dev.get_device<Host>(); 
-  h.do_Host();
-  h.print_name();
-  h.set_value(3);
+  auto h = dev.get_device<Host>(); 
+  h->do_Host();
 
-  Host h2;
-  my_dev.get_device(&h2);
-//  h2 = my_dev.get_device<Host>();
-  h2.do_Host();
+  Context gpu_dev;
+  gpu_dev = GPU();
+  gpu_dev.print_name();
+  auto g = gpu_dev.get_device<GPU>();
+  g->do_GPU();
 
-  h.print_name();
-  h2.print_name(); // should print 2, instead prints 1
+  g->set_value(22); 
+  g->print_name();
+  gpu_dev.print_name();
 
-  my_dev.print_name();
   return 0;
 }
