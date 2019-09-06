@@ -59,7 +59,7 @@ namespace devices
 
     // Methods
     Platform get_platform() { return Platform::cuda; }
-    Cuda &get_default()
+    static Cuda &get_default()
     {
       static Cuda h;
       return h;
@@ -130,6 +130,80 @@ namespace devices
     }
     void memset(void *p, int val, size_t size) { std::memset(p, val, size); }
   };
+
+
+  class Context
+  {
+    public:
+
+      Context(){}
+
+      template<typename T>
+      Context(T&& value){ m_value.reset(new ContextModel<T>(value));}
+
+      template<typename T>
+      T* get_device() { 
+	auto result = dynamic_cast<ContextModel<T>*>(m_value.get()); 
+	if (result ==nullptr)
+	{
+	  std::cout << "NULLPTR" << std::endl;
+	  std::exit(1);
+	}
+	return result->get_device();
+      }
+      Platform get_platform() { return m_value->get_platform(); }
+      template <typename T>
+      T *allocate(size_t size)
+      {
+	return (T *)m_value->calloc(size * sizeof(T));
+      }
+      void *calloc(size_t size) { return m_value->calloc(size); }
+      void free(void *p) { m_value->free(p); }
+      void memcpy(void *dst, const void *src, size_t size)
+      {
+	m_value->memcpy(dst, src, size);
+      }
+      void memset(void *p, int val, size_t size) { m_value->memset(p, val, size); }
+      void wait_on(Event e) { m_value->wait_on(e); }
+
+
+    private:
+      class ContextConcept {
+	public:
+	  virtual ~ContextConcept(){}
+	  virtual Platform get_platform() = 0;
+	  virtual void *calloc(size_t size) = 0;
+	  virtual void free(void *p)=0;
+	  virtual void memcpy(void *dst, const void *src, size_t size)=0;
+	  virtual void memset(void *p, int val, size_t size)=0;
+	  virtual void wait_on(Event e)=0;
+      };
+
+      template<typename T>
+      class ContextModel : public ContextConcept {
+	public:
+	  ContextModel(T const& modelVal) : m_modelVal(modelVal) {}
+          Platform get_platform() override { return m_modelVal.get_platform(); }
+	  void *calloc(size_t size) override { return m_modelVal.calloc(size); }
+	  void free(void *p) override { m_modelVal.free(p); }
+	  void memcpy(void *dst, const void *src, size_t size) override
+	  {
+	    m_modelVal.memcpy(dst, src, size);
+	  }
+	  void memset(void *p, int val, size_t size) override
+	  {
+	    m_modelVal.memset(p, val, size);
+	  }
+	  void wait_on(Event e) { m_modelVal.wait_on(e); }
+	  T *get_device() { return &m_modelVal; }
+	private:
+	  T m_modelVal;
+      };
+
+      std::unique_ptr<ContextConcept> m_value;
+  };
+
+  
 /*
   class Omp : public Host
   {
@@ -174,68 +248,6 @@ namespace devices
     }
   };
 */
-
-  class Device
-  {
-    class dev_wrapper_base
-    {
-    public:
-      virtual Platform get_platform();
-      // virtual Cuda &get_default(); // not sure how to do this
-      virtual void *get_context_id();
-      virtual void wait();
-      virtual void wait_on(Event e);
-      virtual void *calloc(size_t size);
-      virtual void free(void *p);
-      virtual void memcpy(void *dst, const void *src, size_t size);
-      virtual void memset(void *p, int val, size_t size);
-    };
-    template <typename D>
-    class dev_wrapper : public dev_wrapper_base
-    {
-      D dev;
-
-    public:
-      dev_wrapper(D d) : dev(d) {}
-      Platform get_platform() override { return dev.get_platform(); }
-      void wait() override { dev.wait(); }
-      void wait_on(Event e) override { dev.wait_on(e); }
-      void *calloc(size_t size) override { return dev.calloc(size); }
-      void free(void *p) override { dev.free(p); }
-      void memcpy(void *dst, const void *src, size_t size) override
-      {
-        dev.memcpy(dst, src, size);
-      }
-      void memset(void *p, int val, size_t size) override
-      {
-        dev.memset(p, val, size);
-      }
-    };
-
-    std::shared_ptr<dev_wrapper_base> d;
-
-  public:
-    template <typename T>
-    Device(T dev) : d(std::make_shared(dev_wrapper<T>(dev)))
-    {
-    }
-    Platform get_platform() { return d->get_platform(); }
-    void wait() { d->wait(); }
-    void wait_on(Event e) { d->wait_on(e); }
-    template <typename T>
-    T *allocate(size_t size)
-    {
-      return (T *)d->calloc(size * sizeof(T));
-    }
-    void *calloc(size_t size) { return d->calloc(size); }
-    void free(void *p) { d->free(p); }
-    void memcpy(void *dst, const void *src, size_t size)
-    {
-      d->memcpy(dst, src, size);
-    }
-    void memset(void *p, int val, size_t size) { d->memset(p, val, size); }
-  };
- 
 
 }  // namespace devices
 }  // namespace camp

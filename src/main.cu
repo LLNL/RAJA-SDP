@@ -39,8 +39,10 @@ int main(int argc, char *argv[])
 
 #if defined(GPU)
   std::cout << "------ Running on GPU ------" << std::endl;
-  camp::devices::Cuda dev1;
-  camp::devices::Cuda dev2;
+  //camp::devices::Cuda dev1;
+  camp::devices::Context dev1{camp::devices::Cuda()};
+  camp::devices::Context dev2{camp::devices::Cuda()};
+  //camp::devices::Cuda dev2;
 #else
   std::cout << "------ Running on CPU ------" << std::endl;
   camp::devices::Host dev1;
@@ -85,12 +87,12 @@ int main(int argc, char *argv[])
   };
 
 #if defined(GPU)
-  auto e1 = forall(dev1, 0, N, clock_lambda_1);
+  auto e1 = forall(dev1.get_device<camp::devices::Cuda>(), 0, N, clock_lambda_1);
   dev2.wait_on(e1);
   
-  forall(dev1, 0, N, clock_lambda_3);
+  forall(dev1.get_device<camp::devices::Cuda>(), 0, N, clock_lambda_3);
 
-  forall(dev2, 0, N, clock_lambda_2);
+  forall(dev2.get_device<camp::devices::Cuda>(), 0, N, clock_lambda_2);
   cudaDeviceSynchronize();
 #else
   forall(dev1, 0, N, clock_lambda_1);
@@ -114,5 +116,7 @@ int main(int argc, char *argv[])
 
   cudaProfilerStop();
   cudaDeviceReset();
+
+
   return 0;
 }

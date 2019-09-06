@@ -104,7 +104,7 @@ __global__ void forall_kernel_gpu(int start, int length, LOOP_BODY body)
  * \brief Run forall kernel on GPU.
  */
 template <typename LOOP_BODY>
-camp::devices::Event forall(camp::devices::Cuda dev, int begin, int end, LOOP_BODY&& body)
+camp::devices::Event forall(camp::devices::Cuda* dev, int begin, int end, LOOP_BODY&& body)
 {
 //  chai::ArrayManager* rm = chai::ArrayManager::getInstance();
 
@@ -116,8 +116,8 @@ camp::devices::Event forall(camp::devices::Cuda dev, int begin, int end, LOOP_BO
 
 //#if defined(CHAI_ENABLE_CUDA)
 
-  forall_kernel_gpu<<<gridSize, blockSize, 0, dev.get_stream()>>>(begin, end - begin, body);
-  event.capture(dev.get_stream());
+  forall_kernel_gpu<<<gridSize, blockSize, 0, dev->get_stream()>>>(begin, end - begin, body);
+  event.capture(dev->get_stream());
   
 //#elif defined(CHAI_ENABLE_HIP)
 //  hipLaunchKernelGGL(forall_kernel_gpu, dim3(gridSize), dim3(blockSize), 0,0,
