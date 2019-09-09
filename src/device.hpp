@@ -194,7 +194,6 @@ namespace devices
     void memset(void *p, int val, size_t size) { std::memset(p, val, size); }
   };
 
-
   class Context
   {
     public:
@@ -263,7 +262,6 @@ namespace devices
 
       std::unique_ptr<ContextConcept> m_value;
   };
-
   
 /*
   class Omp : public Host

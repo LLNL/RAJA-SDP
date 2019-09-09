@@ -132,13 +132,14 @@ camp::devices::Event forall_gpu(camp::devices::Context* dev, int begin, int end,
 template <typename LOOP_BODY>
 camp::devices::Event forall(camp::devices::Context *con, int begin, int end, LOOP_BODY&& body)
 {
-  if(con->get_platform() == camp::devices::Platform::cuda){
-    return forall_gpu(con, begin, end, body);
+  auto platform = con->get_platform();
+  switch(platform) {
+    case camp::devices::Platform::cuda:
+    case camp::devices::Platform::hip:
+	return forall_gpu(con, begin, end, body);
+    default:
+	return forall_host(con, begin, end, body);
   }
-  if(con->get_platform() == camp::devices::Platform::host){
-    return forall_host(con, begin, end, body);
-  }
-  return camp::devices::Event();
 }
 
 //#endif
