@@ -111,6 +111,7 @@ namespace devices
     {
       // nothing to wait for, sequential/simd host is always synchronous
     }
+    void wait_on(Event e) { }
     // Memory
     template <typename T>
     T *allocate(size_t n)

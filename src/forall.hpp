@@ -74,7 +74,7 @@ void forall_kernel_cpu(int begin, int end, LOOP_BODY body)
  * \brief Run forall kernel on CPU.
  */
 template <typename LOOP_BODY>
-void forall(camp::devices::Host, int begin, int end, LOOP_BODY body)
+camp::devices::Event forall_host(camp::devices::Context* dev, int begin, int end, LOOP_BODY body)
 {
 //  chai::ArrayManager* rm = chai::ArrayManager::getInstance();
 
@@ -84,8 +84,11 @@ void forall(camp::devices::Host, int begin, int end, LOOP_BODY body)
 
 //  rm->setExecutionSpace(chai::CPU);
 
+  auto host = dev->get_device<camp::devices::Host>();
   forall_kernel_cpu(begin, end, body);
 
+  camp::devices::Event e;
+  return e;
 //  rm->setExecutionSpace(chai::NONE);
 }
 
@@ -104,7 +107,7 @@ __global__ void forall_kernel_gpu(int start, int length, LOOP_BODY body)
  * \brief Run forall kernel on GPU.
  */
 template <typename LOOP_BODY>
-camp::devices::Event forall(camp::devices::Cuda* dev, int begin, int end, LOOP_BODY&& body)
+camp::devices::Event forall_gpu(camp::devices::Context* dev, int begin, int end, LOOP_BODY&& body)
 {
 //  chai::ArrayManager* rm = chai::ArrayManager::getInstance();
 
@@ -115,9 +118,9 @@ camp::devices::Event forall(camp::devices::Cuda* dev, int begin, int end, LOOP_B
   camp::devices::Event event;
 
 //#if defined(CHAI_ENABLE_CUDA)
-
-  forall_kernel_gpu<<<gridSize, blockSize, 0, dev->get_stream()>>>(begin, end - begin, body);
-  event.capture(dev->get_stream());
+  auto cuda = dev->get_device<camp::devices::Cuda>();
+  forall_kernel_gpu<<<gridSize, blockSize, 0, cuda->get_stream()>>>(begin, end - begin, body);
+  event.capture(cuda->get_stream());
   
 //#elif defined(CHAI_ENABLE_HIP)
 //  hipLaunchKernelGGL(forall_kernel_gpu, dim3(gridSize), dim3(blockSize), 0,0,
@@ -126,9 +129,21 @@ camp::devices::Event forall(camp::devices::Cuda* dev, int begin, int end, LOOP_B
 //#endif
   
 //  rm->setExecutionSpace(chai::NONE);
-
   return event;
 }
+
+template <typename LOOP_BODY>
+camp::devices::Event forall(camp::devices::Context *con, int begin, int end, LOOP_BODY&& body)
+{
+  if(con->get_platform() == camp::devices::Platform::cuda){
+    return forall_gpu(con, begin, end, body);
+  }
+  if(con->get_platform() == camp::devices::Platform::host){
+    return forall_host(con, begin, end, body);
+  }
+  return camp::devices::Event();
+}
+
 //#endif
 
 #endif  // CHAI_forall_HPP

@@ -70,12 +70,21 @@ namespace exp{
   };
 }
 
+void func2(exp::Context *con){
+  std::cout << "func2 : ";
+  con->print_name();
+}
+
+void func1(exp::Context *con){
+  func2(con);
+}
 
 int main(int argc, char*argv[])
 {
   using namespace exp;
   std::cout << "- TEST : Creating GPU context" << std::endl;
   Context dev{GPU()};
+  func1(&dev);
   dev.print_name();
 
   std::cout << "- TEST : Setting dev to Host object" << std::endl; 

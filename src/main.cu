@@ -45,8 +45,8 @@ int main(int argc, char *argv[])
   //camp::devices::Cuda dev2;
 #else
   std::cout << "------ Running on CPU ------" << std::endl;
-  camp::devices::Host dev1;
-  camp::devices::Host dev2;
+  camp::devices::Context dev1{camp::devices::Host()};
+  camp::devices::Context dev2{camp::devices::Host()};
 #endif
 
   float * m1 = dev1.allocate<float>(N);
@@ -87,17 +87,17 @@ int main(int argc, char *argv[])
   };
 
 #if defined(GPU)
-  auto e1 = forall(dev1.get_device<camp::devices::Cuda>(), 0, N, clock_lambda_1);
+  auto e1 = forall(&dev1, 0, N, clock_lambda_1);
   dev2.wait_on(e1);
   
-  forall(dev1.get_device<camp::devices::Cuda>(), 0, N, clock_lambda_3);
+  forall(&dev1, 0, N, clock_lambda_3);
 
-  forall(dev2.get_device<camp::devices::Cuda>(), 0, N, clock_lambda_2);
+  forall(&dev2, 0, N, clock_lambda_2);
   cudaDeviceSynchronize();
 #else
-  forall(dev1, 0, N, clock_lambda_1);
-  forall(dev1, 0, N, clock_lambda_3);
-  forall(dev2, 0, N, clock_lambda_2);
+  forall(&dev1, 0, N, clock_lambda_1);
+  forall(&dev1, 0, N, clock_lambda_3);
+  forall(&dev2, 0, N, clock_lambda_2);
 #endif
 
 
