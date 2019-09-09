@@ -115,13 +115,10 @@ camp::devices::Event forall_gpu(camp::devices::Context* dev, int begin, int end,
 
   size_t blockSize = 32;
   size_t gridSize = (end - begin + blockSize - 1) / blockSize;
-  camp::devices::Event event;
 
 //#if defined(CHAI_ENABLE_CUDA)
   auto cuda = dev->get_device<camp::devices::Cuda>();
   forall_kernel_gpu<<<gridSize, blockSize, 0, cuda->get_stream()>>>(begin, end - begin, body);
-  event.capture(cuda->get_stream());
-  
 //#elif defined(CHAI_ENABLE_HIP)
 //  hipLaunchKernelGGL(forall_kernel_gpu, dim3(gridSize), dim3(blockSize), 0,0,
 //                     begin, end - begin, body);
@@ -129,7 +126,7 @@ camp::devices::Event forall_gpu(camp::devices::Context* dev, int begin, int end,
 //#endif
   
 //  rm->setExecutionSpace(chai::NONE);
-  return event;
+  return dev->get_event();
 }
 
 template <typename LOOP_BODY>

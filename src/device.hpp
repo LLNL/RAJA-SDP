@@ -21,16 +21,62 @@ namespace devices
   };
 
 
-  class Event
+  class CudaEvent
   {
-  public:
-    Event(){ cudaEventCreateWithFlags(&m_event, cudaEventDisableTiming); }
-    void capture(cudaStream_t stream){ cudaEventRecord(m_event, stream); }
-    void wait(){ while(cudaEventQuery(m_event) != 0){} } 
-  private:
-    cudaEvent_t m_event;
+    public:
+      CudaEvent(){ cudaEventCreateWithFlags(&m_event, cudaEventDisableTiming); }
+      void capture(cudaStream_t stream){ cudaEventRecord(m_event, stream); }
+      void wait() const { while(cudaEventQuery(m_event) != 0){} }
+    private:
+      cudaEvent_t m_event;
   };
 
+  class HostEvent
+  {
+    public:
+      HostEvent(){ }
+      void wait() const { }
+    private:
+  };
+
+  class Event
+  {
+    public:
+      Event(){}
+      template<typename T>
+      Event(T&& value){ m_value.reset(new EventModel<T>(value));}
+
+      void wait() const { m_value->wait(); }
+
+      template<typename T>
+      T* get() {
+	auto result = dynamic_cast<EventModel<T>*>(m_value.get());
+	if (result ==nullptr)
+	{
+	  std::runtime_error("Incompatible Event type get cast.");
+	}
+	return result->get();
+      }
+
+    private:
+      class EventConcept {
+	public:
+	  virtual ~EventConcept(){}
+	  virtual void wait() const = 0;
+      };
+
+      template<typename T>
+      class EventModel : public EventConcept {
+	public:
+	  EventModel(T const& modelVal) : m_modelVal(modelVal) {}
+	  void wait() const override { m_modelVal.wait(); }
+	  T *get() { return &m_modelVal; }
+	private:
+	  T m_modelVal;
+      };
+
+      std::unique_ptr<EventConcept> m_value;
+  };
 
   class Cuda 
   {
@@ -64,8 +110,13 @@ namespace devices
       static Cuda h;
       return h;
     }
+    Event get_event() {
+      Event e{CudaEvent()};
+      e.get<CudaEvent>()->capture(get_stream());
+      return e;
+    }
     void wait() { cudaStreamSynchronize(stream); }
-    void wait_on(Event e) { e.wait(); }
+    void wait_on(Event *e) { e->wait(); }
     template <typename T>
     T *allocate(size_t size)
     {
@@ -107,11 +158,12 @@ namespace devices
       static Host h;
       return h;
     }
-    void wait()
-    {
-      // nothing to wait for, sequential/simd host is always synchronous
+    Event get_event() {
+      Event e{HostEvent()};
+      return e;
     }
-    void wait_on(Event e) { }
+    void wait() {} // nothing to wait for, sequential/simd host is always synchronous
+    void wait_on(Event *e) { }
     // Memory
     template <typename T>
     T *allocate(size_t n)
@@ -136,19 +188,15 @@ namespace devices
   class Context
   {
     public:
-
       Context(){}
-
       template<typename T>
       Context(T&& value){ m_value.reset(new ContextModel<T>(value));}
-
       template<typename T>
       T* get_device() { 
 	auto result = dynamic_cast<ContextModel<T>*>(m_value.get()); 
 	if (result ==nullptr)
 	{
-	  std::cout << "NULLPTR" << std::endl;
-	  std::exit(1);
+	  std::runtime_error("Incompatible Context type get cast.");
 	}
 	return result->get_device();
       }
@@ -165,8 +213,8 @@ namespace devices
 	m_value->memcpy(dst, src, size);
       }
       void memset(void *p, int val, size_t size) { m_value->memset(p, val, size); }
-      void wait_on(Event e) { m_value->wait_on(e); }
-
+      Event get_event() { return m_value->get_event(); }
+      void wait_on(Event *e) { m_value->wait_on(e); }
 
     private:
       class ContextConcept {
@@ -177,7 +225,8 @@ namespace devices
 	  virtual void free(void *p)=0;
 	  virtual void memcpy(void *dst, const void *src, size_t size)=0;
 	  virtual void memset(void *p, int val, size_t size)=0;
-	  virtual void wait_on(Event e)=0;
+	  virtual Event get_event()=0;
+	  virtual void wait_on(Event *e)=0;
       };
 
       template<typename T>
@@ -195,7 +244,8 @@ namespace devices
 	  {
 	    m_modelVal.memset(p, val, size);
 	  }
-	  void wait_on(Event e) { m_modelVal.wait_on(e); }
+	  Event get_event() { return m_modelVal.get_event(); }
+	  void wait_on(Event *e) { m_modelVal.wait_on(e); }
 	  T *get_device() { return &m_modelVal; }
 	private:
 	  T m_modelVal;
