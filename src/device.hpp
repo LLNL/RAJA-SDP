@@ -20,13 +20,13 @@ namespace devices
     hip = 32
   };
 
-
   class CudaEvent
   {
     public:
       CudaEvent(){ cudaEventCreateWithFlags(&m_event, cudaEventDisableTiming); }
       void capture(cudaStream_t stream){ cudaEventRecord(m_event, stream); }
-      void wait() const { while(cudaEventQuery(m_event) != 0){} }
+      bool check() const { return (cudaEventQuery(m_event) == cudaSuccess); }
+      void wait() const { while(!check()){} }
     private:
       cudaEvent_t m_event;
   };
@@ -34,8 +34,9 @@ namespace devices
   class HostEvent
   {
     public:
-      HostEvent(){ }
-      void wait() const { }
+      HostEvent() {}
+      bool check() const { return true; }
+      void wait() const {}
     private:
   };
 
@@ -46,6 +47,7 @@ namespace devices
       template<typename T>
       Event(T&& value){ m_value.reset(new EventModel<T>(value));}
 
+      bool check() const { return m_value->check(); }
       void wait() const { m_value->wait(); }
 
       template<typename T>
@@ -62,6 +64,7 @@ namespace devices
       class EventConcept {
 	public:
 	  virtual ~EventConcept(){}
+	  virtual bool check() const = 0;
 	  virtual void wait() const = 0;
       };
 
@@ -69,6 +72,7 @@ namespace devices
       class EventModel : public EventConcept {
 	public:
 	  EventModel(T const& modelVal) : m_modelVal(modelVal) {}
+	  bool check() const override { return m_modelVal.check(); }
 	  void wait() const override { m_modelVal.wait(); }
 	  T *get() { return &m_modelVal; }
 	private:
@@ -110,7 +114,12 @@ namespace devices
       static Cuda h;
       return h;
     }
-    Event get_event() {
+    CudaEvent get_event() { 
+      CudaEvent e;
+      e.capture(get_stream());
+      return e;
+    }
+    Event get_event_erased() {
       Event e{CudaEvent()};
       e.get<CudaEvent>()->capture(get_stream());
       return e;
@@ -158,7 +167,8 @@ namespace devices
       static Host h;
       return h;
     }
-    Event get_event() {
+    HostEvent get_event() { return HostEvent(); }
+    Event get_event_erased() {
       Event e{HostEvent()};
       return e;
     }
@@ -222,11 +232,11 @@ namespace devices
 	  virtual ~ContextConcept(){}
 	  virtual Platform get_platform() = 0;
 	  virtual void *calloc(size_t size) = 0;
-	  virtual void free(void *p)=0;
-	  virtual void memcpy(void *dst, const void *src, size_t size)=0;
-	  virtual void memset(void *p, int val, size_t size)=0;
-	  virtual Event get_event()=0;
-	  virtual void wait_on(Event *e)=0;
+	  virtual void free(void *p) = 0;
+	  virtual void memcpy(void *dst, const void *src, size_t size) = 0;
+	  virtual void memset(void *p, int val, size_t size) = 0;
+	  virtual Event get_event() = 0;
+	  virtual void wait_on(Event *e) = 0;
       };
 
       template<typename T>
@@ -244,7 +254,7 @@ namespace devices
 	  {
 	    m_modelVal.memset(p, val, size);
 	  }
-	  Event get_event() { return m_modelVal.get_event(); }
+	  Event get_event() { return m_modelVal.get_event_erased(); }
 	  void wait_on(Event *e) { m_modelVal.wait_on(e); }
 	  T *get_device() { return &m_modelVal; }
 	private:
