@@ -3,6 +3,7 @@
 
 #include <cstring>
 #include <memory>
+#include <mutex>
 
 #include <cuda_runtime.h>
 namespace camp
@@ -86,20 +87,28 @@ namespace devices
 
   class Cuda 
   {
+
     static cudaStream_t get_a_stream(int num)
     {
-      // TODO consider pool size
       static cudaStream_t streams[16] = {};
       static int previous = 0;
-      // TODO deal with parallel init
-      if (streams[0] == nullptr) {
-        for (auto &s : streams) {
-          cudaStreamCreate(&s);
-        }
-      }
+
+      static std::once_flag m_onceFlag;
+      static std::mutex m_mtx;
+
+      std::call_once(m_onceFlag,
+	[] {
+	  if (streams[0] == nullptr) {
+	    for (auto &s : streams) {
+	      cudaStreamCreate(&s);
+	    }
+	  }
+	});
 
       if (num < 0) {
+	m_mtx.lock();
         previous = (previous + 1) % 16;
+	m_mtx.unlock();
         return streams[previous];
       }
 
