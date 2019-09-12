@@ -54,7 +54,7 @@ namespace devices
       void wait() const { m_value->wait(); }
 
       template<typename T>
-      T* get() {
+      T get() {
 	auto result = dynamic_cast<EventModel<T>*>(m_value.get());
 	if (result ==nullptr)
 	{
@@ -77,12 +77,12 @@ namespace devices
 	  EventModel(T const& modelVal) : m_modelVal(modelVal) {}
 	  bool check() const override { return m_modelVal.check(); }
 	  void wait() const override { m_modelVal.wait(); }
-	  T *get() { return &m_modelVal; }
+	  T get() { return m_modelVal; }
 	private:
 	  T m_modelVal;
       };
 
-      std::unique_ptr<EventInterface> m_value;
+      std::shared_ptr<EventInterface> m_value;
   };
 
   class Cuda 
@@ -208,13 +208,13 @@ namespace devices
       template<typename T>
       Context(T&& value){ m_value.reset(new ContextModel<T>(value));}
       template<typename T>
-      T* get_device() { 
+      T get() {
 	auto result = dynamic_cast<ContextModel<T>*>(m_value.get()); 
 	if (result ==nullptr)
 	{
 	  std::runtime_error("Incompatible Context type get cast.");
 	}
-	return result->get_device();
+	return result->get();
       }
       Platform get_platform() { return m_value->get_platform(); }
       template <typename T>
@@ -262,12 +262,12 @@ namespace devices
 	  }
 	  Event get_event() { return m_modelVal.get_event_erased(); }
 	  void wait_on(Event *e) { m_modelVal.wait_on(e); }
-	  T *get_device() { return &m_modelVal; }
+	  T get() { return m_modelVal; }
 	private:
 	  T m_modelVal;
       };
 
-      std::unique_ptr<ContextInterface> m_value;
+      std::shared_ptr<ContextInterface> m_value;
   };
   
 /*

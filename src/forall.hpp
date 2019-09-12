@@ -84,7 +84,7 @@ camp::devices::Event forall_host(camp::devices::Context* dev, int begin, int end
 
 //  rm->setExecutionSpace(chai::CPU);
 
-  auto host = dev->get_device<camp::devices::Host>();
+  auto host = dev->get<camp::devices::Host>();
   forall_kernel_cpu(begin, end, body);
 
   camp::devices::Event e;
@@ -117,8 +117,8 @@ camp::devices::Event forall_gpu(camp::devices::Context* dev, int begin, int end,
   size_t gridSize = (end - begin + blockSize - 1) / blockSize;
 
 //#if defined(CHAI_ENABLE_CUDA)
-  auto cuda = dev->get_device<camp::devices::Cuda>();
-  forall_kernel_gpu<<<gridSize, blockSize, 0, cuda->get_stream()>>>(begin, end - begin, body);
+  auto cuda = dev->get<camp::devices::Cuda>();
+  forall_kernel_gpu<<<gridSize, blockSize, 0, cuda.get_stream()>>>(begin, end - begin, body);
 //#elif defined(CHAI_ENABLE_HIP)
 //  hipLaunchKernelGGL(forall_kernel_gpu, dim3(gridSize), dim3(blockSize), 0,0,
 //                     begin, end - begin, body);
