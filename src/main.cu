@@ -98,7 +98,6 @@ int main(int argc, char *argv[])
   forall(&dev2, 0, N, clock_lambda_2);
 #endif
 
-
   // -----------------------------------------------------------------------
   
 

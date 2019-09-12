@@ -87,8 +87,7 @@ camp::devices::Event forall_host(camp::devices::Context* dev, int begin, int end
   auto host = dev->get<camp::devices::Host>();
   forall_kernel_cpu(begin, end, body);
 
-  camp::devices::Event e;
-  return e;
+  return dev->get_event();
 //  rm->setExecutionSpace(chai::NONE);
 }
 
