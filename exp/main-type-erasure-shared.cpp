@@ -27,22 +27,14 @@ class Context
   public:
 
     template<typename T>
-    Context(T&& value){ *this = value; }
-        
-    template<typename T>
-    Context& operator=(T&& value) { 
-      m_value.reset(new ContextModel<T>(value)); 
-      return *this;
-    }
+    Context(T&& value){ m_value.reset(new ContextModel<T>(value)); }
 
     void print_name() const { m_value->print_name(); }
     void set_value(int i) const { m_value->set_value(i); }
 
     template<typename T>
     T get() { 
-      //auto result = std::dynamic_pointer_cast<ContextModel<T>>(m_value); 
       auto result = dynamic_cast<ContextModel<T>*>(m_value.get()); 
-      std::cout << typeid(m_value.get()).name() << std::endl;
       if (result == nullptr)
       {
         std::cout << "NULLPTR" << std::endl;
@@ -85,7 +77,10 @@ void func1(Context *con){
 int main(int argc, char*argv[])
 {
   Context my_dev{GPU()};
+  auto dev2 = my_dev;
+  func1(&dev2);
   auto typed = my_dev.get<GPU>();
+  typed.do_GPU();
   
   return 0;
 }
