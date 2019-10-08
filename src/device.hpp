@@ -10,7 +10,8 @@ namespace camp
 {
 namespace devices
 {
-
+inline namespace v1
+{
   enum class Platform {
     undefined = 0,
     host = 1,
@@ -268,6 +269,7 @@ namespace devices
 
       std::shared_ptr<ContextInterface> m_value;
   };
+}  // inline namespace v1
 }  // namespace devices
 }  // namespace camp
 #endif /* __CAMP_DEVICES_HPP */
