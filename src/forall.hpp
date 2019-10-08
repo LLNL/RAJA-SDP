@@ -74,7 +74,7 @@ void forall_kernel_cpu(int begin, int end, LOOP_BODY body)
  * \brief Run forall kernel on CPU.
  */
 template <typename LOOP_BODY>
-camp::devices::Event forall_host(camp::devices::Context* dev, int begin, int end, LOOP_BODY body)
+camp::devices::Event forall_host(camp::devices::Context& dev, int begin, int end, LOOP_BODY body)
 {
 //  chai::ArrayManager* rm = chai::ArrayManager::getInstance();
 
@@ -84,10 +84,10 @@ camp::devices::Event forall_host(camp::devices::Context* dev, int begin, int end
 
 //  rm->setExecutionSpace(chai::CPU);
 
-  auto host = dev->get<camp::devices::Host>();
+  auto host = dev.get<camp::devices::Host>();
   forall_kernel_cpu(begin, end, body);
 
-  return dev->get_event();
+  return dev.get_event();
 //  rm->setExecutionSpace(chai::NONE);
 }
 
@@ -106,7 +106,7 @@ __global__ void forall_kernel_gpu(int start, int length, LOOP_BODY body)
  * \brief Run forall kernel on GPU.
  */
 template <typename LOOP_BODY>
-camp::devices::Event forall_gpu(camp::devices::Context* dev, int begin, int end, LOOP_BODY&& body)
+camp::devices::Event forall_gpu(camp::devices::Context& dev, int begin, int end, LOOP_BODY&& body)
 {
 //  chai::ArrayManager* rm = chai::ArrayManager::getInstance();
 
@@ -116,7 +116,7 @@ camp::devices::Event forall_gpu(camp::devices::Context* dev, int begin, int end,
   size_t gridSize = (end - begin + blockSize - 1) / blockSize;
 
 //#if defined(CHAI_ENABLE_CUDA)
-  auto cuda = dev->get<camp::devices::Cuda>();
+  auto cuda = dev.get<camp::devices::Cuda>();
   forall_kernel_gpu<<<gridSize, blockSize, 0, cuda.get_stream()>>>(begin, end - begin, body);
 //#elif defined(CHAI_ENABLE_HIP)
 //  hipLaunchKernelGGL(forall_kernel_gpu, dim3(gridSize), dim3(blockSize), 0,0,
@@ -125,13 +125,13 @@ camp::devices::Event forall_gpu(camp::devices::Context* dev, int begin, int end,
 //#endif
   
 //  rm->setExecutionSpace(chai::NONE);
-  return dev->get_event();
+  return dev.get_event();
 }
 
 template <typename LOOP_BODY>
-camp::devices::Event forall(camp::devices::Context *con, int begin, int end, LOOP_BODY&& body)
+camp::devices::Event forall(camp::devices::Context& con, int begin, int end, LOOP_BODY&& body)
 {
-  auto platform = con->get_platform();
+  auto platform = con.get_platform();
   switch(platform) {
     case camp::devices::Platform::cuda:
     case camp::devices::Platform::hip:
